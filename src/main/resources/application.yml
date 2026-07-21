@@ -5,7 +5,7 @@ spring:
     active: naive   # switch to: pessimistic | optimistic | redis (later stages)
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/booking
+    url: jdbc:postgresql://localhost:5433/booking
     username: booking
     password: booking
     hikari:
