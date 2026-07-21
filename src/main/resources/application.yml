@@ -9,7 +9,7 @@ spring:
     username: booking
     password: booking
     hikari:
-      maximum-pool-size: 20
+      maximum-pool-size: 50
 
   jpa:
     hibernate:

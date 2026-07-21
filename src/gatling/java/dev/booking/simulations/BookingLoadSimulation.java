@@ -86,15 +86,15 @@ public class BookingLoadSimulation extends Simulation {
     {
         setUp(
                 hotSeatScenario.injectOpen(
-                        rampUsers(USERS).during(DURATION_SECONDS)
+                        atOnceUsers(USERS)
                 ).protocols(httpProtocol),
 
                 distributedScenario.injectOpen(
                         rampUsers(USERS).during(DURATION_SECONDS)
                 ).protocols(httpProtocol)
         ).assertions(
-                global().responseTime().percentile3().lt(2000), // p95 < 2s, adjust per stage
-                global().failedRequests().percent().lt(1.0)      // "failed" = non-201/409 (5xx, timeouts)
+                global().responseTime().percentile3().lt(2000),
+                global().failedRequests().percent().lt(1.0)
         );
     }
 }
