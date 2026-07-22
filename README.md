@@ -6,24 +6,48 @@
 **Домен:** бронирование мест на мероприятие. Естественно порождает race
 condition — нельзя продать одно и то же место дважды.
 
-## Текущий этап: Stage 0 + Stage 1 (наивная реализация)
+## Текущий этап: Stage 2 (pessimistic locking)
 
-Реализовано:
-- Доменная модель: `Event`, `Seat`, `Booking`
-- REST API: `POST /api/bookings`, `GET /api/events/{id}/seats`
-- **Наивный** сервис бронирования (`NaiveBookingService`) — намеренно без
-  какой-либо защиты от гонки: `read → check → write` без лока.
-- Тест `NaiveBookingRaceConditionTest`, который **должен упасть** на этом
-  этапе — это и есть автоматизированное доказательство бага, а не просто
-  слова в статье.
-- Gatling-симуляция `BookingLoadSimulation` с двумя сценариями:
-  hot-seat (все VU бьют в одно место) и distributed (реалистичная нагрузка).
+Добавлено:
+- `PessimisticLockBookingService` — `SELECT ... FOR UPDATE` через
+  `SeatRepository.findByIdForUpdate` (`@Lock(LockModeType.PESSIMISTIC_WRITE)`).
+  Лок берётся уже на чтении, а не только неявно на записи, как у Postgres по
+  умолчанию — это и закрывает окно гонки, которое оставляла naive-реализация.
+- Тест переструктурирован: логика гонки вынесена в абстрактный
+  `BookingRaceConditionTestBase`, конкретные классы (`NaiveBookingRaceConditionTest`,
+  `PessimisticLockRaceConditionTest`) — это просто `@ActiveProfiles` + наследование.
+  Один и тот же тест: красный на naive, зелёный на pessimistic — без единой
+  скопированной строчки.
 
-Ещё не реализовано (следующие этапы, будут добавлены later):
-- `PessimisticLockBookingService` — `SELECT ... FOR UPDATE`
+### Как переключиться и прогнать
+
+Меняешь профиль в `application.yml`:
+```yaml
+spring:
+  profiles:
+    active: pessimistic   # было naive
+```
+
+```bash
+docker compose down -v && docker compose up -d
+mvn spring-boot:run
+```
+
+Тест (в другом терминале, приложение может даже не быть запущено — Testcontainers поднимет свою БД):
+```bash
+mvn test -Dtest=PessimisticLockRaceConditionTest
+```
+**Ожидаемый результат: тест проходит.** Ровно та же проверка, что валила naive-версию.
+
+Нагрузочный тест — теми же параметрами, что и на Stage 1, для честного сравнения:
+```bash
+mvn clean gatling:test -Dusers=200 -Dduration=30
+```
+
+Ещё не реализовано (следующие этапы):
 - `OptimisticLockBookingService` — `@Version` + retry
 - `RedisLockBookingService` — распределённый лок через Redisson
-- Kafka-based partitioned booking (устранение гонки архитектурно)
+- Kafka-based partitioned booking
 - Observability: Micrometer + Prometheus + Grafana дашборд
 
 ## Как запустить
