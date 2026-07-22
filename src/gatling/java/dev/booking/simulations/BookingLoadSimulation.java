@@ -85,16 +85,22 @@ public class BookingLoadSimulation extends Simulation {
 
     {
         setUp(
+                // BURST, not ramp — the race condition only shows up when requests
+                // truly overlap in time. rampUsers spreads them out over
+                // DURATION_SECONDS, which lets most transactions commit before
+                // the next one arrives, masking the bug almost entirely.
                 hotSeatScenario.injectOpen(
                         atOnceUsers(USERS)
                 ).protocols(httpProtocol),
 
+                // Distributed traffic is realistically ramped — this models
+                // actual customer arrival patterns, not a stress burst.
                 distributedScenario.injectOpen(
                         rampUsers(USERS).during(DURATION_SECONDS)
                 ).protocols(httpProtocol)
         ).assertions(
-                global().responseTime().percentile3().lt(2000),
-                global().failedRequests().percent().lt(1.0)
+                global().responseTime().percentile3().lt(2000), // p95 < 2s, adjust per stage
+                global().failedRequests().percent().lt(1.0)      // "failed" = non-201/409 (5xx, timeouts)
         );
     }
 }

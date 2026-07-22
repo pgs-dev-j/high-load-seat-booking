@@ -38,10 +38,6 @@ public class PessimisticLockBookingService implements BookingService {
     @Override
     @Transactional
     public Booking bookSeat(Long seatId, String userId) {
-        // findByIdForUpdate (below) issues SELECT ... FOR UPDATE — this
-        // transaction now holds an exclusive lock on the row until commit.
-        // Any other transaction calling this same method for the same
-        // seatId blocks right here, at the SELECT, not just at the UPDATE.
         Seat seat = seatRepository.findByIdForUpdate(seatId)
                 .orElseThrow(() -> new SeatNotFoundException(seatId));
 

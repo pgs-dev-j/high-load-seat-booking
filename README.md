@@ -6,46 +6,43 @@
 **Домен:** бронирование мест на мероприятие. Естественно порождает race
 condition — нельзя продать одно и то же место дважды.
 
-## Текущий этап: Stage 2 (pessimistic locking)
+## Текущий этап: Stage 3 (optimistic locking)
 
 Добавлено:
-- `PessimisticLockBookingService` — `SELECT ... FOR UPDATE` через
-  `SeatRepository.findByIdForUpdate` (`@Lock(LockModeType.PESSIMISTIC_WRITE)`).
-  Лок берётся уже на чтении, а не только неявно на записи, как у Postgres по
-  умолчанию — это и закрывает окно гонки, которое оставляла naive-реализация.
-- Тест переструктурирован: логика гонки вынесена в абстрактный
-  `BookingRaceConditionTestBase`, конкретные классы (`NaiveBookingRaceConditionTest`,
-  `PessimisticLockRaceConditionTest`) — это просто `@ActiveProfiles` + наследование.
-  Один и тот же тест: красный на naive, зелёный на pessimistic — без единой
-  скопированной строчки.
+- `version` в `Seat` теперь аннотирован `@Version` — JPA сам добавляет
+  `AND version = ?` к каждому `UPDATE` и проверяет число задетых строк.
+- `OptimisticLockBookingService` — retry-цикл (до 10 попыток) поверх
+  `OptimisticBookingAttempt` (отдельный `@Transactional`-бин — self-invocation
+  из одного класса убил бы прокси и транзакцию тихо, поэтому разделено).
+- Конфликт версии ловится как `ObjectOptimisticLockingFailureException`,
+  после чего делается **новое чтение** — предыдущая (устаревшая) сущность
+  не переиспользуется.
+- `OptimisticLockRaceConditionTest` — тот же базовый тест, профиль `optimistic`.
+
+**Важно:** `@Version` — на уровне сущности, влияет на ВСЕ профили, не только
+`optimistic`. `pessimistic` не затронут (конфликтов там не бывает). Но
+`naive`, если перезапустить на текущем коде, поведёт себя иначе, чем
+задокументировано в `notes/stage1-results.md` — там уже история, её не
+переигрываем.
 
 ### Как переключиться и прогнать
 
-Меняешь профиль в `application.yml`:
 ```yaml
 spring:
   profiles:
-    active: pessimistic   # было naive
+    active: optimistic
 ```
 
 ```bash
 docker compose down -v && docker compose up -d
 mvn spring-boot:run
 ```
-
-Тест (в другом терминале, приложение может даже не быть запущено — Testcontainers поднимет свою БД):
 ```bash
-mvn test -Dtest=PessimisticLockRaceConditionTest
-```
-**Ожидаемый результат: тест проходит.** Ровно та же проверка, что валила naive-версию.
-
-Нагрузочный тест — теми же параметрами, что и на Stage 1, для честного сравнения:
-```bash
+mvn test -Dtest=OptimisticLockRaceConditionTest
 mvn clean gatling:test -Dusers=200 -Dduration=30
 ```
 
 Ещё не реализовано (следующие этапы):
-- `OptimisticLockBookingService` — `@Version` + retry
 - `RedisLockBookingService` — распределённый лок через Redisson
 - Kafka-based partitioned booking
 - Observability: Micrometer + Prometheus + Grafana дашборд

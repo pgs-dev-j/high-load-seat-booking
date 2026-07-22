@@ -27,12 +27,7 @@ public class Seat {
     @Column(nullable = false)
     private SeatStatus status = SeatStatus.AVAILABLE;
 
-    /*
-     * Plain column for now — NOT mapped with @Version.
-     * Stage 1 (naive) intentionally has no concurrency control at all.
-     * In the optimistic-locking stage we annotate this same column with
-     * @Version so JPA starts enforcing it, without a schema migration.
-     */
+    @Version
     @Column(nullable = false)
     private Integer version = 0;
 
